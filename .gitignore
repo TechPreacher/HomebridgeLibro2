@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+
+# Local development files
+install.sh
+sync.sh
+deploy.sh
+*.local
+
+# Environment files
+.env
+.env.local
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# npm
+npm-debug.log*
+.npm
+
+# Testing
+coverage/
+
+# Mac OS
+.DS_Store
