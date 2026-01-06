@@ -463,7 +463,7 @@ class PetLibroFountain {
     this.model = device.productName || device.product_name || device.model || 'Smart Fountain';
     
     // Water level state
-    this.waterLevel = 0;
+    this.waterLevel = 100;
     this.lastUpdate = null;
     
     // Polling interval (default: 5 minutes)
@@ -476,20 +476,37 @@ class PetLibroFountain {
       .setCharacteristic(this.platform.api.hap.Characteristic.SerialNumber, this.deviceId || 'Unknown')
       .setCharacteristic(this.platform.api.hap.Characteristic.FirmwareRevision, device.firmwareVersion || device.firmware_version || '1.0.0');
     
-    // Get or create the humidity sensor service (used to display water level as percentage)
-    this.humidityService = this.accessory.getService(this.platform.api.hap.Service.HumiditySensor) 
-      || this.accessory.addService(this.platform.api.hap.Service.HumiditySensor);
-    
-    this.humidityService.setCharacteristic(this.platform.api.hap.Characteristic.Name, `${this.name} Water Level`);
-    
-    this.humidityService.getCharacteristic(this.platform.api.hap.Characteristic.CurrentRelativeHumidity)
-      .onGet(this.getWaterLevel.bind(this));
+    // Remove any old humidity sensor service if it exists (migrating from old version)
+    const existingHumidityService = this.accessory.getService(this.platform.api.hap.Service.HumiditySensor);
+    if (existingHumidityService) {
+      this.accessory.removeService(existingHumidityService);
+    }
     
     // Remove any old switch service if it exists (in case device type changed)
     const existingSwitchService = this.accessory.getService(this.platform.api.hap.Service.Switch);
     if (existingSwitchService) {
       this.accessory.removeService(existingSwitchService);
     }
+    
+    // Get or create the battery service (used to display water level as percentage)
+    this.batteryService = this.accessory.getService(this.platform.api.hap.Service.Battery) 
+      || this.accessory.addService(this.platform.api.hap.Service.Battery);
+    
+    this.batteryService.setCharacteristic(this.platform.api.hap.Characteristic.Name, `${this.name} Water Level`);
+    
+    // Set up battery level characteristic for water level
+    this.batteryService.getCharacteristic(this.platform.api.hap.Characteristic.BatteryLevel)
+      .onGet(this.getWaterLevel.bind(this));
+    
+    // Set up low battery status (triggers when water is below 20%)
+    this.batteryService.getCharacteristic(this.platform.api.hap.Characteristic.StatusLowBattery)
+      .onGet(this.getLowWaterStatus.bind(this));
+    
+    // Set charging state to "not charging" (not applicable for water fountain)
+    this.batteryService.setCharacteristic(
+      this.platform.api.hap.Characteristic.ChargingState,
+      this.platform.api.hap.Characteristic.ChargingState.NOT_CHARGING
+    );
     
     this.log.info(`Initialized fountain: ${this.name} (${this.deviceId})`);
     
@@ -505,6 +522,14 @@ class PetLibroFountain {
     return this.waterLevel;
   }
   
+  async getLowWaterStatus() {
+    // Return low battery status when water level is below 20%
+    const Characteristic = this.platform.api.hap.Characteristic;
+    return this.waterLevel < 20 
+      ? Characteristic.StatusLowBattery.BATTERY_LEVEL_LOW 
+      : Characteristic.StatusLowBattery.BATTERY_LEVEL_NORMAL;
+  }
+  
   async updateWaterLevel() {
     try {
       const realInfo = await this.platform.fetchDeviceRealInfo(this.deviceId);
@@ -517,10 +542,21 @@ class PetLibroFountain {
           this.waterLevel = Math.min(100, Math.max(0, weightPercent));
           this.lastUpdate = new Date();
           
-          // Update the HomeKit characteristic
-          this.humidityService
-            .getCharacteristic(this.platform.api.hap.Characteristic.CurrentRelativeHumidity)
+          const Characteristic = this.platform.api.hap.Characteristic;
+          
+          // Update the battery level characteristic
+          this.batteryService
+            .getCharacteristic(Characteristic.BatteryLevel)
             .updateValue(this.waterLevel);
+          
+          // Update low battery status
+          this.batteryService
+            .getCharacteristic(Characteristic.StatusLowBattery)
+            .updateValue(
+              this.waterLevel < 20 
+                ? Characteristic.StatusLowBattery.BATTERY_LEVEL_LOW 
+                : Characteristic.StatusLowBattery.BATTERY_LEVEL_NORMAL
+            );
           
           this.log.debug(`[${this.name}] Water level updated: ${this.waterLevel}%`);
         } else {
@@ -554,6 +590,6 @@ class PetLibroFountain {
   }
   
   getServices() {
-    return [this.informationService, this.humidityService];
+    return [this.informationService, this.batteryService];
   }
 }

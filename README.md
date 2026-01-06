@@ -95,16 +95,17 @@ Add the following to your Homebridge `config.json` in the `platforms` section:
 The plugin automatically discovers all PetLibro devices linked to your account:
 
 - **Feeders** appear as switches in HomeKit - tap to trigger manual feeding
-- **Water Fountains** appear as humidity sensors showing water level percentage
+- **Water Fountains** appear with a battery indicator showing water level percentage
 - Devices use their names from the PetLibro app
 - New devices are added automatically on Homebridge restart
 - Removed devices are automatically cleaned up
 
 ### Water Fountain Notes
 
-Water fountains display their water level as a **humidity sensor** in HomeKit. This is a workaround because HomeKit doesn't have a native "water level" sensor type.
+Water fountains display their water level as a **battery percentage** in HomeKit. This provides a familiar visual indicator for the water level.
 
 - The percentage shown represents how full the water reservoir is (0-100%)
+- A "Low Battery" warning appears when water level drops below 20%
 - Water level is updated periodically (default: every 5 minutes)
 - You can adjust the polling interval with the `fountainPollingInterval` option
 
