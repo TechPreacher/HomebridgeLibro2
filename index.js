@@ -20,6 +20,30 @@ const FOUNTAIN_IDENTIFIERS = [
   'Fountain'
 ];
 
+// Regional API endpoints. Upstream HA integration ships only US; EU is
+// speculative but kept here so users on EU accounts can opt in via
+// `region: "EU"` without forking. Falls back to US.
+const API_REGIONS = {
+  US: 'https://api.us.petlibro.com',
+  EU: 'https://api.eu.petlibro.com'
+};
+
+// Coarse country -> region mapping; only used when neither `apiEndpoint`
+// nor `region` is set in config. Anything not listed defaults to US.
+const COUNTRY_TO_REGION = {
+  AT: 'EU', BE: 'EU', BG: 'EU', CH: 'EU', CY: 'EU', CZ: 'EU', DE: 'EU',
+  DK: 'EU', EE: 'EU', ES: 'EU', FI: 'EU', FR: 'EU', GB: 'EU', GR: 'EU',
+  HR: 'EU', HU: 'EU', IE: 'EU', IT: 'EU', LT: 'EU', LU: 'EU', LV: 'EU',
+  MT: 'EU', NL: 'EU', NO: 'EU', PL: 'EU', PT: 'EU', RO: 'EU', SE: 'EU',
+  SI: 'EU', SK: 'EU', UK: 'EU'
+};
+
+function resolveBaseUrl(config) {
+  if (config.apiEndpoint) return config.apiEndpoint;
+  const region = (config.region || COUNTRY_TO_REGION[(config.country || '').toUpperCase()] || 'US').toUpperCase();
+  return API_REGIONS[region] || API_REGIONS.US;
+}
+
 module.exports = function(homebridge) {
   Service = homebridge.hap.Service;
   Characteristic = homebridge.hap.Characteristic;
@@ -54,13 +78,12 @@ class PetLibroPlatform {
     
     // Shared authentication state across all devices
     this.accessToken = null;
-    this.refreshToken = null;
     this.tokenExpiry = null;
     
     // PetLibro API configuration
     this.email = this.config.email;
     this.password = this.config.password;
-    this.baseUrl = this.config.apiEndpoint || 'https://api.us.petlibro.com';
+    this.baseUrl = resolveBaseUrl(this.config);
     
     this.api.on('didFinishLaunching', () => {
       this.discoverDevices();
@@ -116,8 +139,7 @@ class PetLibroPlatform {
       if (data && data.code === 0) {
         if (data.data && data.data.token) {
           this.accessToken = data.data.token;
-          this.refreshToken = data.data.refresh_token || null;
-          
+
           const expiresIn = data.data.expires_in || 3600;
           this.tokenExpiry = Date.now() + (expiresIn * 1000);
           
@@ -143,58 +165,49 @@ class PetLibroPlatform {
     }
   }
   
-  async refreshAuthToken() {
-    if (!this.refreshToken) {
-      return this.authenticate();
-    }
-    
-    try {
-      const response = await axios.post(`${this.baseUrl}/member/auth/refresh`, {
-        refresh_token: this.refreshToken
-      }, {
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.accessToken}`
-        }
-      });
-      
-      if (response.data && response.data.access_token) {
-        this.accessToken = response.data.access_token;
-        this.tokenExpiry = Date.now() + (response.data.expires_in * 1000);
-        this.log('Token refreshed successfully');
-      }
-    } catch (error) {
-      this.log.warn('Token refresh failed, re-authenticating...');
-      return this.authenticate();
-    }
-  }
-  
   async ensureAuthenticated() {
-    if (!this.accessToken || Date.now() >= this.tokenExpiry) {
-      await this.refreshAuthToken();
+    if (!this.accessToken || !this.tokenExpiry || Date.now() >= this.tokenExpiry) {
+      await this.authenticate();
     }
   }
-  
+
+  // Single entry point for all authenticated API calls.
+  // Sends only `token` header (matches upstream HA integration).
+  // On code 1009 (NOT_YET_LOGIN) the server has invalidated the token early
+  // (commonly: another login on the same account); re-authenticate and retry once.
+  async apiPost(path, body = {}, { timeout = 10000 } = {}) {
+    await this.ensureAuthenticated();
+
+    const buildHeaders = () => ({
+      'Content-Type': 'application/json',
+      'token': this.accessToken,
+      'source': 'ANDROID',
+      'language': 'EN',
+      'timezone': this.config.timezone || 'America/New_York',
+      'version': '1.3.45'
+    });
+
+    const url = `${this.baseUrl}${path}`;
+    let response = await axios.post(url, body, { headers: buildHeaders(), timeout });
+
+    if (response.data && response.data.code === 1009) {
+      this.log.warn(`Token rejected by ${path} (code 1009 NOT_YET_LOGIN), re-authenticating...`);
+      await this.authenticate();
+      response = await axios.post(url, body, { headers: buildHeaders(), timeout });
+    }
+
+    return response;
+  }
+
   // Fetch real-time device info (used for water level, etc.)
   async fetchDeviceRealInfo(deviceSn) {
     try {
-      await this.ensureAuthenticated();
-      
-      const response = await axios.post(`${this.baseUrl}/device/device/realInfo`, {
+      // Upstream HA integration sends both `id` and `deviceSn` for serial-keyed endpoints
+      const response = await this.apiPost('/device/device/realInfo', {
+        id: deviceSn,
         deviceSn: deviceSn
-      }, {
-        headers: {
-          'Authorization': `Bearer ${this.accessToken}`,
-          'Content-Type': 'application/json',
-          'token': this.accessToken,
-          'source': 'ANDROID',
-          'language': 'EN',
-          'timezone': this.config.timezone || 'America/New_York',
-          'version': '1.3.45'
-        },
-        timeout: 10000
       });
-      
+
       if (response.data && response.data.code === 0 && response.data.data) {
         return response.data.data;
       }
@@ -204,25 +217,12 @@ class PetLibroPlatform {
       return null;
     }
   }
-  
+
   async fetchDevicesFromAPI() {
     try {
       this.log('Fetching device list from PetLibro API...');
-      await this.ensureAuthenticated();
-      
-      const response = await axios.post(`${this.baseUrl}/device/device/list`, {}, {
-        headers: {
-          'Authorization': `Bearer ${this.accessToken}`,
-          'Content-Type': 'application/json',
-          'token': this.accessToken,
-          'source': 'ANDROID',
-          'language': 'EN',
-          'timezone': this.config.timezone || 'America/New_York',
-          'version': '1.3.45'
-        },
-        timeout: 10000
-      });
-      
+      const response = await this.apiPost('/device/device/list', {});
+
       if (response.data && response.data.code === 0 && response.data.data) {
         const devices = response.data.data;
         
@@ -400,43 +400,30 @@ class PetLibroFeeder {
   }
   
   async triggerFeeding() {
-    await this.platform.ensureAuthenticated();
-    
     if (!this.deviceId) {
       throw new Error('Device ID not found - cannot send feed command');
     }
-    
+
     const portions = parseInt(this.config.portions || 1);
     this.log(`[${this.name}] Sending manual feed command (${portions} portion(s))`);
-    
+
     const feedData = {
       deviceSn: this.deviceId,
       grainNum: portions,
       requestId: this.generateRequestId()
     };
-    
-    const response = await axios.post(`${this.platform.baseUrl}/device/device/manualFeeding`, feedData, {
-      headers: {
-        'Authorization': `Bearer ${this.platform.accessToken}`,
-        'Content-Type': 'application/json',
-        'token': this.platform.accessToken,
-        'source': 'ANDROID',
-        'language': 'EN',
-        'timezone': this.config.timezone || 'America/New_York',
-        'version': '1.3.45'
-      },
-      timeout: 15000
-    });
-    
+
+    const response = await this.platform.apiPost('/device/device/manualFeeding', feedData, { timeout: 15000 });
+
     if (response.status === 200) {
-      if (typeof response.data === 'number' || 
+      if (typeof response.data === 'number' ||
           (response.data && response.data.code === 0) ||
           response.data === 0) {
         this.log(`[${this.name}] Manual feeding triggered successfully!`);
         return;
       }
     }
-    
+
     throw new Error(`Feed command failed with status ${response.status}`);
   }
   
@@ -476,37 +463,28 @@ class PetLibroFountain {
       .setCharacteristic(this.platform.api.hap.Characteristic.SerialNumber, this.deviceId || 'Unknown')
       .setCharacteristic(this.platform.api.hap.Characteristic.FirmwareRevision, device.firmwareVersion || device.firmware_version || '1.0.0');
     
-    // Remove any old humidity sensor service if it exists (migrating from old version)
-    const existingHumidityService = this.accessory.getService(this.platform.api.hap.Service.HumiditySensor);
-    if (existingHumidityService) {
-      this.accessory.removeService(existingHumidityService);
+    // Migrations: strip legacy/cross-type services from cached accessories
+    // (prior versions used Battery; feeder->fountain type swaps leave a Switch behind)
+    const existingBatteryService = this.accessory.getService(this.platform.api.hap.Service.Battery);
+    if (existingBatteryService) {
+      this.accessory.removeService(existingBatteryService);
     }
-    
-    // Remove any old switch service if it exists (in case device type changed)
     const existingSwitchService = this.accessory.getService(this.platform.api.hap.Service.Switch);
     if (existingSwitchService) {
       this.accessory.removeService(existingSwitchService);
     }
-    
-    // Get or create the battery service (used to display water level as percentage)
-    this.batteryService = this.accessory.getService(this.platform.api.hap.Service.Battery) 
-      || this.accessory.addService(this.platform.api.hap.Service.Battery);
-    
-    this.batteryService.setCharacteristic(this.platform.api.hap.Characteristic.Name, `${this.name} Water Level`);
-    
-    // Set up battery level characteristic for water level
-    this.batteryService.getCharacteristic(this.platform.api.hap.Characteristic.BatteryLevel)
+
+    // HomeKit has no native fill-level characteristic. Sensor services are the
+    // only ones that render as a visible tile in Apple Home; HumiditySensor's
+    // 0-100% range maps directly onto water-reservoir percent. Mislabeled as
+    // "Humidity" in Apple Home but the live value is visible at a glance.
+    this.humidityService = this.accessory.getService(this.platform.api.hap.Service.HumiditySensor)
+      || this.accessory.addService(this.platform.api.hap.Service.HumiditySensor);
+
+    this.humidityService.setCharacteristic(this.platform.api.hap.Characteristic.Name, `${this.name} Water Level`);
+
+    this.humidityService.getCharacteristic(this.platform.api.hap.Characteristic.CurrentRelativeHumidity)
       .onGet(this.getWaterLevel.bind(this));
-    
-    // Set up low battery status (triggers when water is below 20%)
-    this.batteryService.getCharacteristic(this.platform.api.hap.Characteristic.StatusLowBattery)
-      .onGet(this.getLowWaterStatus.bind(this));
-    
-    // Set charging state to "not charging" (not applicable for water fountain)
-    this.batteryService.setCharacteristic(
-      this.platform.api.hap.Characteristic.ChargingState,
-      this.platform.api.hap.Characteristic.ChargingState.NOT_CHARGING
-    );
     
     this.log.info(`Initialized fountain: ${this.name} (${this.deviceId})`);
     
@@ -518,46 +496,26 @@ class PetLibroFountain {
   }
   
   async getWaterLevel() {
-    // Return cached value, polling will update it
+    // Return cached value; polling refreshes it
     return this.waterLevel;
   }
-  
-  async getLowWaterStatus() {
-    // Return low battery status when water level is below 20%
-    const Characteristic = this.platform.api.hap.Characteristic;
-    return this.waterLevel < 20 
-      ? Characteristic.StatusLowBattery.BATTERY_LEVEL_LOW 
-      : Characteristic.StatusLowBattery.BATTERY_LEVEL_NORMAL;
-  }
-  
+
   async updateWaterLevel() {
     try {
       const realInfo = await this.platform.fetchDeviceRealInfo(this.deviceId);
-      
+
       if (realInfo) {
         // Water level is stored as weightPercent (0-100)
         const weightPercent = realInfo.weightPercent;
-        
+
         if (typeof weightPercent === 'number') {
           this.waterLevel = Math.min(100, Math.max(0, weightPercent));
           this.lastUpdate = new Date();
-          
-          const Characteristic = this.platform.api.hap.Characteristic;
-          
-          // Update the battery level characteristic
-          this.batteryService
-            .getCharacteristic(Characteristic.BatteryLevel)
+
+          this.humidityService
+            .getCharacteristic(this.platform.api.hap.Characteristic.CurrentRelativeHumidity)
             .updateValue(this.waterLevel);
-          
-          // Update low battery status
-          this.batteryService
-            .getCharacteristic(Characteristic.StatusLowBattery)
-            .updateValue(
-              this.waterLevel < 20 
-                ? Characteristic.StatusLowBattery.BATTERY_LEVEL_LOW 
-                : Characteristic.StatusLowBattery.BATTERY_LEVEL_NORMAL
-            );
-          
+
           this.log.debug(`[${this.name}] Water level updated: ${this.waterLevel}%`);
         } else {
           this.log.debug(`[${this.name}] No water level data available in response`);
@@ -590,6 +548,6 @@ class PetLibroFountain {
   }
   
   getServices() {
-    return [this.informationService, this.batteryService];
+    return [this.informationService, this.humidityService];
   }
 }
