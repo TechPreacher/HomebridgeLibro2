@@ -187,6 +187,37 @@ This plugin uses the same API endpoints as the official PetLibro mobile applicat
 - Manual Feeding: `POST /device/device/manualFeeding`
 - Device Real Info: `POST /device/device/realInfo` (for water level)
 
+## Testing
+
+Tests use Node's built-in `node:test` runner — no extra dependencies. **Requires Node.js 18 or newer.**
+
+```bash
+npm install
+npm test
+```
+
+### What's covered
+
+- **`test/device-type.test.js`** — `getDeviceType()` classification: `PLWF*` serials and product names containing *Dockstream*/*Fountain* (case-insensitive) classify as fountains; everything else defaults to feeder. Includes coverage for alias field names (`product_name`, `model`, `device_id`, `deviceId`) returned by different firmware versions.
+- **`test/region.test.js`** — `resolveBaseUrl()` precedence: `apiEndpoint` override > `region` > country-to-region mapping > US default. Verifies EU country codes (DE, FR, GB, …) route to the EU endpoint and unknown codes fall back to US.
+- **`test/auth.test.js`** — `hashPassword()` produces RFC 1321 MD5; `apiPost()` retries once on PetLibro error code `1009` (NOT_YET_LOGIN) after re-authenticating; it sends only the `token` header (no `Authorization: Bearer`); `authenticate()` rejects when credentials are missing.
+
+### Running a single test file
+
+```bash
+node --test test/device-type.test.js
+```
+
+### Filtering tests by name
+
+```bash
+node --test --test-name-pattern='1009' 'test/**/*.test.js'
+```
+
+### Adding tests
+
+Test files live in `test/`, suffix `.test.js`. Internals not exported from `index.js` (`getDeviceType`, `resolveBaseUrl`, the classes) are reachable via `require('..')._test` — keep production consumers on the default Homebridge initializer.
+
 ## Contributing
 
 Found a bug or want to contribute? 

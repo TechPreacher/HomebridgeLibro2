@@ -551,3 +551,17 @@ class PetLibroFountain {
     return [this.informationService, this.humidityService];
   }
 }
+
+// Test-only exports. Production consumers must keep using the default export
+// (the Homebridge `module.exports = function(homebridge)` initializer above).
+module.exports._test = {
+  getDeviceType,
+  resolveBaseUrl,
+  PetLibroPlatform,
+  PetLibroFeeder,
+  PetLibroFountain,
+  DEVICE_TYPE,
+  FOUNTAIN_IDENTIFIERS,
+  API_REGIONS,
+  COUNTRY_TO_REGION
+};

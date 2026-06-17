@@ -11,7 +11,9 @@ The PetLibro API is undocumented; endpoints and request shapes are reverse-engin
 ## Commands
 
 - `npm install` — install `axios` (only runtime dep).
-- `npm test` / `npm run lint` — placeholders (no tests, no linter configured). Do not assume CI guards exist.
+- `npm test` — run unit tests via Node's built-in `node:test` runner. **Requires Node ≥18** (the published plugin still runs on Node ≥14.18.1 per `engines`; only the test runner needs 18). Test files live in `test/*.test.js` and reach private helpers via the `_test` export at the bottom of `index.js`.
+- Single file: `node --test test/device-type.test.js`. Filter by name: `node --test --test-name-pattern='1009' 'test/**/*.test.js'`.
+- `npm run lint` — placeholder; no linter wired up.
 - Local Homebridge dev install: `npm install -g .` then point Homebridge at the platform `PetLibroPlatform` in `config.json`. There is no watch/build task — edit `index.js` and restart Homebridge.
 
 ## Architecture
