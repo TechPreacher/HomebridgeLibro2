@@ -16,6 +16,8 @@ Original repository: [HomebridgeLibro](https://github.com/praveensharma/Homebrid
 - 🔐 **Secure Authentication**: Uses the same API as the official PetLibro app
 - 🐾 **Multi-Device Support**: Automatically discovers and adds all feeders and fountains linked to your account
 - 💧 **Water Fountain Support**: View water level of compatible water fountains in HomeKit
+- 📶 **Offline Detection**: Apple Home shows "Not Responding" when PetLibro reports the device offline
+- 🔒 **Token Persistence**: Auth token is cached across Homebridge restarts to reduce login traffic and avoid kicking the PetLibro mobile app out (single-session-per-account constraint)
 
 ## Supported Devices
 
@@ -201,6 +203,10 @@ npm test
 - **`test/device-type.test.js`** — `getDeviceType()` classification: `PLWF*` serials and product names containing *Dockstream*/*Fountain* (case-insensitive) classify as fountains; everything else defaults to feeder. Includes coverage for alias field names (`product_name`, `model`, `device_id`, `deviceId`) returned by different firmware versions.
 - **`test/region.test.js`** — `resolveBaseUrl()` precedence: `apiEndpoint` override > `region` > country-to-region mapping > US default. Verifies EU country codes (DE, FR, GB, …) route to the EU endpoint and unknown codes fall back to US.
 - **`test/auth.test.js`** — `hashPassword()` produces RFC 1321 MD5; `apiPost()` retries once on PetLibro error code `1009` (NOT_YET_LOGIN) after re-authenticating; it sends only the `token` header (no `Authorization: Bearer`); `authenticate()` rejects when credentials are missing.
+- **`test/debug-dump.test.js`** — `debugDeviceDump` flag emits exactly one dump line containing the raw device payload; default-off path emits nothing; passwords never leak into any log channel.
+- **`test/offline.test.js`** — feeder `setOn` throws `HapStatusError(SERVICE_COMMUNICATION_FAILURE)` when `device.online === false`, succeeds when online or when the field is absent; fountain `getWaterLevel` throws when offline, returns the cached level when online, treats missing `realInfo.online` as still online.
+- **`test/token-persistence.test.js`** — auth token round-trips to disk with mode `0600`; expired or near-expired tokens are not restored; corrupt or missing files fall back silently; per-email hashing keeps multi-account installs separate and doesn't expose the email in the filename.
+- **`test/request-id.test.js`** — `generateRequestId()` returns RFC 4122 UUID v4 strings and produces unique values across calls.
 
 ### Running a single test file
 

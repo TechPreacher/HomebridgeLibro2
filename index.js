@@ -4,6 +4,8 @@
 
 const axios = require('axios');
 const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
 
 let Service, Characteristic;
 
@@ -84,10 +86,60 @@ class PetLibroPlatform {
     this.email = this.config.email;
     this.password = this.config.password;
     this.baseUrl = resolveBaseUrl(this.config);
-    
+
+    // Token persistence across Homebridge restarts. Mirrors upstream HA
+    // integration, which stores the token in config_entry.data so restarts
+    // don't fire a fresh /member/auth/login — important because PetLibro
+    // enforces one active session per account, and every fresh login kicks
+    // the mobile app out.
+    this.tokenFilePath = this.resolveTokenFilePath();
+    this.loadPersistedToken();
+
     this.api.on('didFinishLaunching', () => {
       this.discoverDevices();
     });
+  }
+
+  // Derives a stable per-account filename. Hash the email so the filesystem
+  // path doesn't disclose the account address; truncate for compactness.
+  resolveTokenFilePath() {
+    if (!this.email || !this.api || !this.api.user || typeof this.api.user.storagePath !== 'function') {
+      return null;
+    }
+    const emailHash = crypto.createHash('sha256').update(this.email).digest('hex').slice(0, 16);
+    return path.join(this.api.user.storagePath(), `petlibro-token-${emailHash}.json`);
+  }
+
+  loadPersistedToken() {
+    if (!this.tokenFilePath) return;
+    try {
+      const raw = fs.readFileSync(this.tokenFilePath, 'utf8');
+      const data = JSON.parse(raw);
+      // Require >60s of headroom so we don't load a token that's about to
+      // expire mid-request.
+      if (
+        data &&
+        typeof data.token === 'string' &&
+        typeof data.expiry === 'number' &&
+        data.expiry > Date.now() + 60_000
+      ) {
+        this.accessToken = data.token;
+        this.tokenExpiry = data.expiry;
+        this.log.debug('Loaded persisted PetLibro auth token from disk');
+      }
+    } catch (err) {
+      // Missing or corrupt file is fine — we'll authenticate fresh.
+    }
+  }
+
+  persistToken() {
+    if (!this.tokenFilePath || !this.accessToken || !this.tokenExpiry) return;
+    try {
+      const payload = JSON.stringify({ token: this.accessToken, expiry: this.tokenExpiry });
+      fs.writeFileSync(this.tokenFilePath, payload, { mode: 0o600 });
+    } catch (err) {
+      this.log.warn('Failed to persist auth token:', err.message);
+    }
   }
   
   configureAccessory(accessory) {
@@ -142,7 +194,9 @@ class PetLibroPlatform {
 
           const expiresIn = data.data.expires_in || 3600;
           this.tokenExpiry = Date.now() + (expiresIn * 1000);
-          
+
+          this.persistToken();
+
           this.log('Authentication successful!');
           return;
         } else {
@@ -385,7 +439,24 @@ class PetLibroFeeder {
   async setOn(value) {
     if (value) {
       this.log(`[${this.name}] Feed button tapped! Triggering manual feeding...`);
-      
+
+      // Mirror upstream HA integration: if PetLibro reports the device offline
+      // in /device/device/list, surface "Not Responding" in Apple Home rather
+      // than firing a feed command that will silently fail server-side.
+      if (this.device && this.device.online === false) {
+        this.log.warn(`[${this.name}] Device reports offline; refusing to send feed command`);
+        setTimeout(() => {
+          this.switchService
+            .getCharacteristic(this.platform.api.hap.Characteristic.On)
+            .updateValue(false);
+        }, 100);
+        const hap = this.platform.api.hap;
+        if (hap.HapStatusError && hap.HAPStatus) {
+          throw new hap.HapStatusError(hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE);
+        }
+        throw new Error('Device offline');
+      }
+
       try {
         await this.triggerFeeding();
         this.log(`[${this.name}] Feeding command completed successfully`);
@@ -438,7 +509,9 @@ class PetLibroFeeder {
   }
   
   generateRequestId() {
-    return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+    // Mirrors upstream HA integration, which uses uuid.uuid4() — crypto-grade
+    // randomness instead of two stitched Math.random() slices.
+    return crypto.randomUUID();
   }
   
   getServices() {
@@ -462,6 +535,9 @@ class PetLibroFountain {
     // Water level state
     this.waterLevel = 100;
     this.lastUpdate = null;
+    // Mirror upstream HA integration: track realInfo.online and surface
+    // "Not Responding" in Apple Home when the fountain drops offline.
+    this.online = true;
     
     // Polling interval (default: 5 minutes)
     this.pollingInterval = (this.config.fountainPollingInterval || 300) * 1000;
@@ -506,6 +582,13 @@ class PetLibroFountain {
   }
   
   async getWaterLevel() {
+    if (this.online === false) {
+      const hap = this.platform.api.hap;
+      if (hap.HapStatusError && hap.HAPStatus) {
+        throw new hap.HapStatusError(hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE);
+      }
+      throw new Error('Fountain offline');
+    }
     // Return cached value; polling refreshes it
     return this.waterLevel;
   }
@@ -515,6 +598,13 @@ class PetLibroFountain {
       const realInfo = await this.platform.fetchDeviceRealInfo(this.deviceId);
 
       if (realInfo) {
+        // Track online state alongside water level; realInfo.online may be
+        // absent on some firmware revisions — treat absence as "online" to
+        // avoid spurious "Not Responding" on devices that don't report it.
+        if (typeof realInfo.online === 'boolean') {
+          this.online = realInfo.online;
+        }
+
         // Water level is stored as weightPercent (0-100)
         const weightPercent = realInfo.weightPercent;
 
