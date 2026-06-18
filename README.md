@@ -220,15 +220,84 @@ Test files live in `test/`, suffix `.test.js`. Internals not exported from `inde
 
 ## Reporting Unsupported Devices
 
-If your PetLibro device isn't being detected, is detected as the wrong type, or doesn't behave correctly:
+If your PetLibro device isn't detected, is detected as the wrong type, or doesn't behave correctly, the plugin can dump the raw JSON it gets back from PetLibro's `/device/device/list` endpoint. We use these payloads to add explicit detection rules for new models. The dump contains device metadata only (model, name, serial, firmware) — it does NOT include your account password or auth token.
 
-1. Enable **Debug: Dump Raw Device List** in the plugin settings (or set `"debugDeviceDump": true` in `config.json`).
-2. Restart Homebridge.
-3. Search the Homebridge log for `[debugDeviceDump]` and copy the JSON block that follows it.
-4. Open a GitHub issue using the [Unsupported Device template](https://github.com/TechPreacher/HomebridgeLibro2/issues/new?template=unsupported-device.md) and paste the JSON.
-5. **Disable the flag once you've captured the payload** — it logs on every restart.
+### Step 1 — Enable the debug dump
 
-The dump contains device metadata only (model, name, serial). It does NOT include your account password or auth token.
+**Homebridge Config UI X (recommended):**
+
+1. Open the Homebridge web UI.
+2. Go to **Plugins** → **PetLibro Smart Feeder & Fountain** → **Settings** (gear icon).
+3. Scroll to **Debug: Dump Raw Device List** and toggle it **on**.
+4. Click **Save**.
+
+**Manual `config.json`:**
+
+Add `"debugDeviceDump": true` to your platform block:
+
+```json
+{
+  "platform": "PetLibroPlatform",
+  "email": "your-petlibro-email@example.com",
+  "password": "your-petlibro-password",
+  "debugDeviceDump": true
+}
+```
+
+### Step 2 — Restart Homebridge
+
+- **Config UI X:** click the orange power icon in the top bar.
+- **CLI / systemd:** `sudo systemctl restart homebridge`
+- **Docker:** `docker restart homebridge`
+- **macOS Homebrew service:** `brew services restart homebridge`
+
+### Step 3 — Capture the dump from the log
+
+Where the log lives depends on your install:
+
+| Install | Log location |
+|---|---|
+| Config UI X | **Logs** tab in the web UI |
+| Debian/Ubuntu (systemd) | `journalctl -u homebridge -f` |
+| Raspberry Pi (hb-service) | `sudo hb-service logs` or `/var/lib/homebridge/homebridge.log` |
+| macOS Homebrew | `~/Library/Logs/homebridge/homebridge.log` |
+| Docker | `docker logs -f homebridge` |
+| Custom install | wherever your `--log-path` points; usually stdout |
+
+Look for a line starting with `[debugDeviceDump] Raw /device/device/list response:` followed by a pretty-printed JSON array. To find it quickly:
+
+```bash
+# systemd
+journalctl -u homebridge --no-pager | grep -A 200 '\[debugDeviceDump\]'
+
+# log file
+grep -A 200 '\[debugDeviceDump\]' /var/lib/homebridge/homebridge.log
+
+# Config UI X: in the Logs tab, type [debugDeviceDump] in the search box
+```
+
+Copy everything from the opening `[` of the JSON array to its matching closing `]`.
+
+### Step 4 — Scrub anything personal
+
+The payload typically contains:
+
+- ✅ Safe to share: `deviceSn`, `productName`, `productIdentifier`, `productCode`, `model`, `deviceType`, `firmwareVersion`, `online`, regional flags.
+- ⚠️ May want to scrub: `deviceName` (whatever you named it in the PetLibro app — e.g. *"Mittens' Feeder — Kitchen"*), `wifiSsid`, room labels, anything you wouldn't want public.
+
+Replace those fields with placeholders before pasting (e.g. `"deviceName": "<redacted>"`). The model and serial-number prefix are what we actually need.
+
+### Step 5 — File the issue
+
+Open a GitHub issue using the [Unsupported Device template](https://github.com/TechPreacher/HomebridgeLibro2/issues/new?template=unsupported-device.md) and paste the scrubbed JSON into the code block in the template.
+
+### Step 6 — Turn the flag off
+
+Once you've captured a dump, **disable `debugDeviceDump`** in the plugin settings (or remove the line from `config.json`) and restart Homebridge again. Left on, it logs the full payload on every restart, which bloats your log file over time.
+
+### What we do with the payload
+
+We use the `productName` / `productIdentifier` / `deviceSn` prefix fields to add an exact-match rule to `getDeviceType()` and a per-model entry to the device matrix in [`docs/plans/2026-06-18-device-expansion.md`](docs/plans/2026-06-18-device-expansion.md). Most models tend to work today via the existing prefix routing (`PLWF*` → fountain, everything else → feeder); the dump just lets us confirm that and ship explicit handling.
 
 ## Contributing
 
