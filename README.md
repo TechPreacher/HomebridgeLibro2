@@ -218,9 +218,21 @@ node --test --test-name-pattern='1009' 'test/**/*.test.js'
 
 Test files live in `test/`, suffix `.test.js`. Internals not exported from `index.js` (`getDeviceType`, `resolveBaseUrl`, the classes) are reachable via `require('..')._test` — keep production consumers on the default Homebridge initializer.
 
+## Reporting Unsupported Devices
+
+If your PetLibro device isn't being detected, is detected as the wrong type, or doesn't behave correctly:
+
+1. Enable **Debug: Dump Raw Device List** in the plugin settings (or set `"debugDeviceDump": true` in `config.json`).
+2. Restart Homebridge.
+3. Search the Homebridge log for `[debugDeviceDump]` and copy the JSON block that follows it.
+4. Open a GitHub issue using the [Unsupported Device template](https://github.com/TechPreacher/HomebridgeLibro2/issues/new?template=unsupported-device.md) and paste the JSON.
+5. **Disable the flag once you've captured the payload** — it logs on every restart.
+
+The dump contains device metadata only (model, name, serial). It does NOT include your account password or auth token.
+
 ## Contributing
 
-Found a bug or want to contribute? 
+Found a bug or want to contribute?
 
 1. Check existing [issues](https://github.com/TechPreacher/HomebridgeLibro2/issues)
 2. Create a detailed bug report with:

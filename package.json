@@ -1,6 +1,6 @@
 {
   "name": "homebridge-petlibro-2",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "displayName": "PetLibro Smart Feeder & Fountain",
   "description": "Homebridge plugin for PetLibro smart feeders and water fountains. Control your pet feeder and monitor water fountain levels through Apple HomeKit.",
   "main": "index.js",
@@ -128,6 +128,12 @@
           "title": "Device ID (Optional)",
           "type": "string",
           "description": "Specific device ID if you have multiple feeders (auto-detected if not provided)"
+        },
+        "debugDeviceDump": {
+          "title": "Debug: Dump Raw Device List",
+          "type": "boolean",
+          "default": false,
+          "description": "When enabled, logs the raw /device/device/list JSON response on every Homebridge restart. Use this to capture the productName/deviceSn fields for unsupported devices and paste them into a GitHub issue using the 'Unsupported Device' template. Disable in normal operation."
         }
       },
       "required": [

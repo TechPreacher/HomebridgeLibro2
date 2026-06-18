@@ -225,7 +225,17 @@ class PetLibroPlatform {
 
       if (response.data && response.data.code === 0 && response.data.data) {
         const devices = response.data.data;
-        
+
+        // Opt-in raw payload dump for unsupported-device bug reports.
+        // Safe to log: /device/device/list contains device metadata only,
+        // no credentials, no tokens.
+        if (this.config.debugDeviceDump) {
+          this.log.info(
+            '[debugDeviceDump] Raw /device/device/list response:\n' +
+            JSON.stringify(devices, null, 2)
+          );
+        }
+
         if (Array.isArray(devices) && devices.length > 0) {
           this.log(`Found ${devices.length} device(s) in PetLibro account`);
           return devices;
