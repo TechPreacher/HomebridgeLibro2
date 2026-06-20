@@ -15,12 +15,23 @@ const DEVICE_TYPE = {
   FOUNTAIN: 'fountain'
 };
 
-// Known fountain product names/models
-const FOUNTAIN_IDENTIFIERS = [
-  'PLWF', // Product code prefix for water fountains
-  'Dockstream',
-  'Fountain'
-];
+// Fountain identification.
+//
+// The two checks are intentionally split so the deviceSn prefix can be
+// short (2 chars) without false-positively matching arbitrary product
+// names that happen to contain those letters.
+//
+// FOUNTAIN_NAME_KEYWORDS — case-insensitive substring match against
+// productName / product_name / model.
+const FOUNTAIN_NAME_KEYWORDS = ['Dockstream', 'Fountain'];
+
+// FOUNTAIN_SERIAL_PREFIXES — case-insensitive prefix match against
+// deviceSn / device_id / deviceId. Real PetLibro serials use a 2-char
+// family code (e.g. WF01010302A3746E5E4D) NOT the PLWF product code
+// from marketing materials. Both are kept here defensively — PLWF for
+// any firmware that does prefix with the marketing code, WF for the
+// observed production format.
+const FOUNTAIN_SERIAL_PREFIXES = ['PLWF', 'WF'];
 
 // PetLibro API endpoint. The upstream HA integration (jjjonesjr33/petlibro)
 // ships only the US endpoint, and api.eu.petlibro.com does not resolve
@@ -50,15 +61,17 @@ module.exports = function(homebridge) {
 function getDeviceType(device) {
   const productName = device.productName || device.product_name || device.model || '';
   const deviceSn = device.deviceSn || device.device_id || device.deviceId || '';
-  
-  // Check if it's a fountain
-  for (const identifier of FOUNTAIN_IDENTIFIERS) {
-    if (productName.toLowerCase().includes(identifier.toLowerCase()) ||
-        deviceSn.toUpperCase().startsWith(identifier.toUpperCase())) {
-      return DEVICE_TYPE.FOUNTAIN;
-    }
+
+  const nameLower = productName.toLowerCase();
+  for (const keyword of FOUNTAIN_NAME_KEYWORDS) {
+    if (nameLower.includes(keyword.toLowerCase())) return DEVICE_TYPE.FOUNTAIN;
   }
-  
+
+  const snUpper = deviceSn.toUpperCase();
+  for (const prefix of FOUNTAIN_SERIAL_PREFIXES) {
+    if (snUpper.startsWith(prefix.toUpperCase())) return DEVICE_TYPE.FOUNTAIN;
+  }
+
   // Default to feeder
   return DEVICE_TYPE.FEEDER;
 }
@@ -654,6 +667,7 @@ module.exports._test = {
   PetLibroFeeder,
   PetLibroFountain,
   DEVICE_TYPE,
-  FOUNTAIN_IDENTIFIERS,
+  FOUNTAIN_NAME_KEYWORDS,
+  FOUNTAIN_SERIAL_PREFIXES,
   API_REGIONS
 };

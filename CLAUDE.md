@@ -55,7 +55,18 @@ Rationale: PetLibro enforces one active session per account. Every fresh login k
 
 ### Device type detection
 
-`getDeviceType(device)` classifies based on `productName`/`deviceSn` containing `PLWF`, `Dockstream`, or `Fountain` (case-insensitive). Everything else becomes a feeder. The UUID seed includes the device type (`'petlibro-' + deviceType + '-' + deviceSn`), so a device flipping classification produces a new accessory rather than reusing the wrong service tree.
+`getDeviceType(device)` classifies in two passes:
+
+1. **`FOUNTAIN_NAME_KEYWORDS`** (`Dockstream`, `Fountain`) — case-insensitive substring match against `productName`/`product_name`/`model`.
+2. **`FOUNTAIN_SERIAL_PREFIXES`** (`PLWF`, `WF`) — case-insensitive prefix match against `deviceSn`/`device_id`/`deviceId`.
+
+Either pass hitting → `DEVICE_TYPE.FOUNTAIN`. Otherwise → `DEVICE_TYPE.FEEDER`.
+
+**Important historical note:** Real PetLibro serials use a **2-char family code** (`WF` for fountains, `AF` for feeders) — *not* the `PLWF`/`PLAF` marketing codes from petlibro.com. v1.5.1 and earlier had only `PLWF` in the prefix list, so the serial check never fired on real data and classification worked only because the productName fallback caught "Dockstream"/"Fountain". v1.5.2 added `WF` after the first production deployment captured real serials. When adding more device families, capture real `/device/device/list` payloads first (via `debugDeviceDump` or normal startup logs) — don't assume the marketing code matches the serial prefix.
+
+The split between name keywords and serial prefixes exists so short (2-char) serial prefixes can't false-positive against arbitrary product-name substrings.
+
+The UUID seed includes the device type (`'petlibro-' + deviceType + '-' + deviceSn`), so a device flipping classification produces a new accessory rather than reusing the wrong service tree.
 
 ### Endpoint resolution
 

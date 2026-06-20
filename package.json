@@ -1,6 +1,6 @@
 {
   "name": "homebridge-petlibro-2",
-  "version": "1.5.1",
+  "version": "1.5.2",
   "displayName": "PetLibro Smart Feeder & Fountain",
   "description": "Homebridge plugin for PetLibro smart feeders and water fountains. Control your pet feeder and monitor water fountain levels through Apple HomeKit.",
   "main": "index.js",

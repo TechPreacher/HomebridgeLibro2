@@ -106,10 +106,26 @@ Skip until upstream lands code. Track issue #214.
 
 ## 5. Open questions blocking decisive design
 
-1. Real `productIdentifier` strings per model — unverified. Required input for Wave B.
+1. Real `productIdentifier` strings per model — **partially confirmed** (see §5b). PLAF107/108/109/301 and PLWF305/106/116 still unconfirmed.
 2. PLWF116 cordless battery field — unknown. May warrant `Service.Battery` alongside HumiditySensor.
 3. PLAF109 Switch semantics — does upstream tap `manualFeedNow` (dispense current plate) or `platePositionChange` (rotate)? Read `polar_wet_food_feeder.py` before Wave C.
 4. Cached-accessory migration on detection-table changes — accept one-bridge-restart cost or force re-detection on version bump?
+
+## 5b. Confirmed real-world serial prefixes (captured from v1.5.1 production logs, 2026-06-20)
+
+The PetLibro API returns serial numbers using a **2-char family code** prefix — *not* the marketing/product code (`PLAF***`/`PLWF***`) used in the README and on petlibro.com. The `PL` prefix is documentation-only.
+
+| Marketing code | Real `deviceSn` prefix | productName | Captured serial (redacted suffix would be unique) |
+|---|---|---|---|
+| `PLWF105` (Dockstream Smart Fountain) | `WF` | `Dockstream Smart Fountain` | `WF01010302A3746E5E4D` |
+| `PLAF203` (Granary Smart Camera Feeder) | `AF` | `Granary Smart Camera Feeder` | `AF0304310001842024EAEY` |
+
+**Implications:**
+- The pre-1.5.2 `PLWF` deviceSn-prefix check in `getDeviceType` never fired on real data. Classification worked only because the `productName` fallback caught `"Dockstream"` / `"Fountain"`. A future fountain with an unfamiliar `productName` would have silently misclassified as a feeder.
+- v1.5.2 adds `WF` (and keeps `PLWF` defensively) to `FOUNTAIN_SERIAL_PREFIXES`. Feeders are still default-fallthrough since the data point shows `AF`-prefixed serial classifying correctly without an explicit `AF` rule.
+- The `deviceSn` shape so far suggests `<2-char-family><digits/letters>` — a serial format, not a model code. Per-model identification (PLWF105 vs PLWF305 vs PLWF106) will likely require parsing the next few characters of the serial OR (more reliably) using the `productName` field. Capture more samples before locking in a per-model detection table.
+
+**Status of the Wave A debug-dump campaign:** two devices self-reported via normal startup logs (no `debugDeviceDump` flag needed). Still useful for unsupported models — Wave A remains worth keeping in the README.
 
 ## 6. Testing approach (binding for every wave)
 

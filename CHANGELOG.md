@@ -2,6 +2,20 @@
 
 All notable user-facing changes to `homebridge-petlibro-2` are documented here. Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.2] - 2026-06-20
+
+Detection refinement based on the first real-world serial-number data from a v1.5.1 production deployment. No user-visible behavior change for anyone whose devices currently classify correctly; closes a latent misclassification risk for devices whose `productName` lacks fountain keywords.
+
+### Fixed
+- **`getDeviceType` deviceSn-prefix check now matches real PetLibro serials.** Production captures show the API returns serials prefixed with a 2-char family code (`WF` for fountains, `AF` for feeders) — not the `PLWF`/`PLAF` marketing/product codes used in the README and on petlibro.com. The pre-1.5.2 `PLWF` check never fired on real data; classification worked only because the `productName` fallback caught "Dockstream"/"Fountain". `WF` is now added to the serial-prefix list (with `PLWF` kept defensively). Fountains that ever return an unfamiliar `productName` will still classify correctly via serial alone.
+
+### Changed
+- **Split `FOUNTAIN_IDENTIFIERS` into `FOUNTAIN_NAME_KEYWORDS` + `FOUNTAIN_SERIAL_PREFIXES`** so the 2-char `WF` deviceSn prefix doesn't false-positive against arbitrary product names containing the substring "WF".
+- **Plan doc updated** (`docs/plans/2026-06-18-device-expansion.md` §5b) with the two confirmed real-world serial prefixes and a note that per-model identification (PLWF105 vs PLWF305 etc.) still needs more capture samples.
+
+### Added
+- 5 new test cases in `test/device-type.test.js` pinning the real-world `WF`/`AF` serial classification and a regression guard against 2-char substring false-positives.
+
 ## [1.5.1] - 2026-08-06
 
 Hotfix release. The regional endpoint routing added in 1.5.0 was a speculative addition based on a guessed `api.eu.petlibro.com` URL that does not actually resolve (NXDOMAIN). Users whose `country` config value mapped to EU (DE, FR, GB, CH, IT, ES, NL, SE, …) hit `getaddrinfo ENOTFOUND api.eu.petlibro.com` and the plugin failed to discover devices.
@@ -64,6 +78,7 @@ Initial fork-era functionality:
 
 Versions `1.3.1`, `1.4.0`, and `1.4.1` existed as logical milestones during the development of 1.5.0 but were never published to npm. The changes from those milestones are rolled into the `1.5.0` entry above. Future releases will publish each version increment.
 
+[1.5.2]: https://github.com/TechPreacher/HomebridgeLibro2/releases/tag/v1.5.2
 [1.5.1]: https://github.com/TechPreacher/HomebridgeLibro2/releases/tag/v1.5.1
 [1.5.0]: https://github.com/TechPreacher/HomebridgeLibro2/releases/tag/v1.5.0
 [1.3.0]: https://github.com/TechPreacher/HomebridgeLibro2/releases/tag/v1.3.0
