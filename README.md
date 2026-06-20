@@ -89,8 +89,9 @@ Add the following to your Homebridge `config.json` in the `platforms` section:
 | `password` | Yes | | Your PetLibro account password |
 | `portions` | No | `1` | Number of portions per feeding (1-10) |
 | `timezone` | No | `"America/New_York"` | Your timezone |
-| `country` | No | `"US"` | Your country code |
+| `country` | No | `"US"` | Your country code — sent to PetLibro for login regional metadata; does not change which API endpoint is used |
 | `fountainPollingInterval` | No | `300` | Seconds between water level updates for fountains |
+| `apiEndpoint` | No | `https://api.us.petlibro.com` | Advanced: full base-URL override. PetLibro currently runs a single global endpoint; the mobile app uses it from every region |
 
 ## Multi-Device Support
 

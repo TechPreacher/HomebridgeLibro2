@@ -22,28 +22,21 @@ const FOUNTAIN_IDENTIFIERS = [
   'Fountain'
 ];
 
-// Regional API endpoints. Upstream HA integration ships only US; EU is
-// speculative but kept here so users on EU accounts can opt in via
-// `region: "EU"` without forking. Falls back to US.
+// PetLibro API endpoint. The upstream HA integration (jjjonesjr33/petlibro)
+// ships only the US endpoint, and api.eu.petlibro.com does not resolve
+// (NXDOMAIN as of 2026-06-20) — confirmed after v1.5.0 shipped EU as a
+// speculative addition and broke users whose country code routed there.
+// Users on EU accounts: the US endpoint accepts EU credentials too (the
+// PetLibro mobile app uses the same backend regardless of region). If
+// PetLibro ever publishes a real EU endpoint, set `apiEndpoint` in config
+// to override.
 const API_REGIONS = {
-  US: 'https://api.us.petlibro.com',
-  EU: 'https://api.eu.petlibro.com'
-};
-
-// Coarse country -> region mapping; only used when neither `apiEndpoint`
-// nor `region` is set in config. Anything not listed defaults to US.
-const COUNTRY_TO_REGION = {
-  AT: 'EU', BE: 'EU', BG: 'EU', CH: 'EU', CY: 'EU', CZ: 'EU', DE: 'EU',
-  DK: 'EU', EE: 'EU', ES: 'EU', FI: 'EU', FR: 'EU', GB: 'EU', GR: 'EU',
-  HR: 'EU', HU: 'EU', IE: 'EU', IT: 'EU', LT: 'EU', LU: 'EU', LV: 'EU',
-  MT: 'EU', NL: 'EU', NO: 'EU', PL: 'EU', PT: 'EU', RO: 'EU', SE: 'EU',
-  SI: 'EU', SK: 'EU', UK: 'EU'
+  US: 'https://api.us.petlibro.com'
 };
 
 function resolveBaseUrl(config) {
   if (config.apiEndpoint) return config.apiEndpoint;
-  const region = (config.region || COUNTRY_TO_REGION[(config.country || '').toUpperCase()] || 'US').toUpperCase();
-  return API_REGIONS[region] || API_REGIONS.US;
+  return API_REGIONS.US;
 }
 
 module.exports = function(homebridge) {
@@ -662,6 +655,5 @@ module.exports._test = {
   PetLibroFountain,
   DEVICE_TYPE,
   FOUNTAIN_IDENTIFIERS,
-  API_REGIONS,
-  COUNTRY_TO_REGION
+  API_REGIONS
 };

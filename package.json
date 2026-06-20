@@ -1,6 +1,6 @@
 {
   "name": "homebridge-petlibro-2",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "displayName": "PetLibro Smart Feeder & Fountain",
   "description": "Homebridge plugin for PetLibro smart feeders and water fountains. Control your pet feeder and monitor water fountain levels through Apple HomeKit.",
   "main": "index.js",
@@ -112,17 +112,10 @@
           "default": "US",
           "description": "Your country code (e.g., US, CA, UK)"
         },
-        "region": {
-          "title": "API Region",
-          "type": "string",
-          "enum": ["US", "EU"],
-          "default": "US",
-          "description": "PetLibro API region. Defaults to US; set EU if your account is on the EU server."
-        },
         "apiEndpoint": {
           "title": "API Endpoint Override",
           "type": "string",
-          "description": "Advanced: full base URL override (e.g. https://api.us.petlibro.com). Takes precedence over Region."
+          "description": "Advanced: full base URL override (e.g. https://api.us.petlibro.com). Leave empty to use the default. PetLibro currently exposes only one global endpoint (api.us.petlibro.com); accounts in all regions authenticate against it."
         },
         "deviceId": {
           "title": "Device ID (Optional)",

@@ -57,14 +57,11 @@ Rationale: PetLibro enforces one active session per account. Every fresh login k
 
 `getDeviceType(device)` classifies based on `productName`/`deviceSn` containing `PLWF`, `Dockstream`, or `Fountain` (case-insensitive). Everything else becomes a feeder. The UUID seed includes the device type (`'petlibro-' + deviceType + '-' + deviceSn`), so a device flipping classification produces a new accessory rather than reusing the wrong service tree.
 
-### Regional endpoint routing
+### Endpoint resolution
 
-`resolveBaseUrl(config)` picks `baseUrl` with this precedence:
+`resolveBaseUrl(config)` returns `config.apiEndpoint` if set, otherwise `https://api.us.petlibro.com`.
 
-1. Explicit `config.apiEndpoint` override (full URL, used for testing or as escape hatch)
-2. Explicit `config.region` (`"US"` or `"EU"`)
-3. `config.country` mapped via `COUNTRY_TO_REGION` table (EU codes → EU, everything else → US)
-4. Default: `API_REGIONS.US` (`https://api.us.petlibro.com`)
+**Historical note — do not re-add EU routing without verification.** v1.5.0 shipped a speculative `api.eu.petlibro.com` URL plus a `COUNTRY_TO_REGION` map that auto-routed EU country codes to it. The EU endpoint does not actually exist (NXDOMAIN), so every user with `country: DE`/`FR`/`GB`/`CH`/etc. hit `getaddrinfo ENOTFOUND` on startup. v1.5.1 reverted to single-endpoint. The PetLibro mobile app uses the US endpoint globally regardless of the user's country, so there is no actual EU API to route to. If PetLibro ever publishes a real EU host, verify it resolves (`host api.eu.petlibro.com`) before adding it to `API_REGIONS`, and add an integration test that catches NXDOMAIN at build time.
 
 ### Auth flow
 

@@ -2,6 +2,24 @@
 
 All notable user-facing changes to `homebridge-petlibro-2` are documented here. Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.1] - 2026-08-06
+
+Hotfix release. The regional endpoint routing added in 1.5.0 was a speculative addition based on a guessed `api.eu.petlibro.com` URL that does not actually resolve (NXDOMAIN). Users whose `country` config value mapped to EU (DE, FR, GB, CH, IT, ES, NL, SE, …) hit `getaddrinfo ENOTFOUND api.eu.petlibro.com` and the plugin failed to discover devices.
+
+### Fixed
+- **`getaddrinfo ENOTFOUND api.eu.petlibro.com` on startup** for users with EU country codes. The plugin now always uses `api.us.petlibro.com` (which serves all regions — the official PetLibro mobile app uses the same backend regardless of where the user is). Reverts the `COUNTRY_TO_REGION` auto-routing introduced in 1.5.0.
+
+### Removed
+- `region` config field (was a no-op in practice after the EU endpoint failure; removed from Config UI X schema).
+- `COUNTRY_TO_REGION` table.
+- `API_REGIONS.EU` entry.
+
+### Kept
+- `apiEndpoint` config field still works as a full-URL override for any future PetLibro endpoint changes.
+
+### Migration
+Nothing to do. If you had `region` or `country` set in your config, they're now ignored — your config will keep working as-is, just routed to the US endpoint like the mobile app does.
+
 ## [1.5.0] - 2026-06-20
 
 First release after a focused round of API hardening, fountain support, and test coverage. Carries over three patterns from the upstream Home Assistant integration ([jjjonesjr33/petlibro](https://github.com/jjjonesjr33/petlibro)) plus broader water-fountain coverage.
@@ -10,7 +28,7 @@ First release after a focused round of API hardening, fountain support, and test
 - **Water-fountain support** for Dockstream Smart Fountain (PLWF105), Dockstream RFID (PLWF305), Dockstream 2 Plug-In (PLWF106), and Dockstream 2 Cordless (PLWF116). Water level is surfaced as a `HumiditySensor` tile in Apple Home — the only HomeKit primitive that renders a visible % tile.
 - **Offline detection.** Apple Home now shows **"Not Responding"** when PetLibro reports a device offline. Fountains track `realInfo.online` on every poll; feeders check `online` from `/device/device/list` before firing a feed command. Missing `online` field is treated as still-online so older firmware doesn't trigger spurious unreachable states.
 - **Token persistence across Homebridge restarts.** The auth token is cached to `<storagePath>/petlibro-token-<sha256(email)>.json` with file mode `0600`. Mirrors the upstream HA integration. Motivated by PetLibro's one-active-session-per-account constraint: every fresh login kicks the mobile app out, so eliminating restart-driven logins keeps your phone app logged in. Per-email hashing supports multi-account installs; the email never appears in plaintext on disk.
-- **Regional endpoint routing** (`region: "US" | "EU"`) with a country-to-region fallback table, plus an `apiEndpoint` override for testing.
+- **`apiEndpoint` config override** for advanced users who need to point at a non-default base URL. *(Note: 1.5.0 also shipped a speculative `region: "EU"` field and country-to-region auto-routing, both reverted in 1.5.1 — see that entry.)*
 - **`debugDeviceDump` config flag** — when set, logs the raw `/device/device/list` JSON so users with unsupported PetLibro models can paste payloads into the new [Unsupported Device issue template](https://github.com/TechPreacher/HomebridgeLibro2/issues/new?template=unsupported-device.md). Contains device metadata only; a test asserts the password never appears in any log channel.
 - **48-test unit suite** via Node's built-in `node:test` runner. Zero new runtime or dev dependencies. `npm test` runs in <2s; requires Node ≥18 (the published plugin still runs on Node ≥14.18.1 per `engines`).
 - **`CLAUDE.md`** with architecture notes for future contributors; **`docs/plans/2026-06-18-device-expansion.md`** cataloging the 11 PetLibro device families upstream supports and a phased plan for porting the remaining 9.
@@ -46,5 +64,6 @@ Initial fork-era functionality:
 
 Versions `1.3.1`, `1.4.0`, and `1.4.1` existed as logical milestones during the development of 1.5.0 but were never published to npm. The changes from those milestones are rolled into the `1.5.0` entry above. Future releases will publish each version increment.
 
+[1.5.1]: https://github.com/TechPreacher/HomebridgeLibro2/releases/tag/v1.5.1
 [1.5.0]: https://github.com/TechPreacher/HomebridgeLibro2/releases/tag/v1.5.0
 [1.3.0]: https://github.com/TechPreacher/HomebridgeLibro2/releases/tag/v1.3.0
