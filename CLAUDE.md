@@ -22,7 +22,7 @@ The PetLibro API is undocumented; endpoints and request shapes are reverse-engin
 
 - `npm install` — install `axios` (only runtime dep).
 - `npm test` — run unit tests via Node's built-in `node:test` runner. **Requires Node ≥18** (the published plugin still runs on Node ≥14.18.1 per `engines`; only the test runner needs 18). Test files live in `test/*.test.js` and reach private helpers via the `_test` export at the bottom of `index.js`.
-- Single file: `node --test test/device-type.test.js`. Filter by name: `node --test --test-name-pattern='1009' 'test/**/*.test.js'`.
+- Single file: `node --test test/device-type.test.js`. Filter by name: `node --test --test-name-pattern='1009' test/*.test.js`. The unquoted glob lets the shell expand the file list, which works on Node 18 onward; quoted globs (`'test/**/*.test.js'`) require Node 22+ for native glob support and were the cause of an early CI failure.
 - `npm run lint` — placeholder; no linter wired up.
 - Local Homebridge dev install: `npm install -g .` then point Homebridge at the platform `PetLibroPlatform` in `config.json`. There is no watch/build task — edit `index.js` and restart Homebridge.
 

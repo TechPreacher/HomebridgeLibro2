@@ -217,7 +217,7 @@ node --test test/device-type.test.js
 ### Filtering tests by name
 
 ```bash
-node --test --test-name-pattern='1009' 'test/**/*.test.js'
+node --test --test-name-pattern='1009' test/*.test.js
 ```
 
 ### Adding tests

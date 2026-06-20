@@ -61,7 +61,7 @@
     "axios": "^1.6.0"
   },
   "scripts": {
-    "test": "node --test 'test/**/*.test.js'",
+    "test": "node --test test/*.test.js",
     "lint": "echo \"No linting configured\" && exit 0"
   },
   "homebridge": {
